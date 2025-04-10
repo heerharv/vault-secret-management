@@ -1,0 +1,82 @@
+---
+- name: Generate SSH certificates with Vault
+  hosts: localhost
+  gather_facts: false
+  vars:
+    vault_addr: "http://127.0.0.1:8200"
+    vault_token: "{{ lookup('env', 'VAULT_TOKEN') }}"
+    ssh_role: "admin-role"  # SSH role configured in Vault
+    username: "{{ lookup('env', 'USER') }}"
+    public_key_path: "~/.ssh/id_rsa.pub"
+    signed_key_path: "~/.ssh/id_rsa-cert.pub"
+
+  tasks:
+    - name: Ensure hvac is installed
+      pip:
+        name: hvac
+        state: present
+      become: false
+
+    - name: Check if SSH public key exists
+      stat:
+        path: "{{ public_key_path }}"
+      register: pubkey_stat
+
+    - name: Fail if SSH public key doesn't exist
+      fail:
+        msg: "SSH public key not found at {{ public_key_path }}. Generate one with 'ssh-keygen'."
+      when: not pubkey_stat.stat.exists
+
+    - name: Read SSH public key
+      slurp:
+        src: "{{ public_key_path }}"
+      register: ssh_public_key_b64
+      when: pubkey_stat.stat.exists
+
+    - name: Decode public key content
+      set_fact:
+        ssh_public_key: "{{ ssh_public_key_b64['content'] | b64decode | regex_replace('\\n', '') }}"
+      when: pubkey_stat.stat.exists
+
+    - name: Sign SSH key with Vault
+      uri:
+        url: "{{ vault_addr }}/v1/ssh/sign/{{ ssh_role }}"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        body_format: json
+        body:
+          public_key: "{{ ssh_public_key }}"
+          valid_principals: "{{ username }}"
+          ttl: "24h"
+        status_code: 200
+      register: signed_key
+      when: pubkey_stat.stat.exists
+
+    - name: Save signed certificate
+      copy:
+        content: "{{ signed_key.json.data.signed_key }}"
+        dest: "{{ signed_key_path }}"
+        mode: 0644
+      when: pubkey_stat.stat.exists and signed_key is defined
+
+    - name: Display certificate information
+      shell: ssh-keygen -L -f {{ signed_key_path }}
+      register: cert_info
+      changed_when: false
+      when: pubkey_stat.stat.exists and signed_key is defined
+
+    - name: Show certificate details
+      debug:
+        var: cert_info.stdout_lines
+      when: cert_info is defined
+
+    - name: Instructions for using signed certificate
+      debug:
+        msg: |
+          Certificate has been saved to {{ signed_key_path }}
+          
+          To use this certificate for SSH authentication:
+          1. Ensure the target server trusts Vault's CA public key
+          2. SSH using: ssh -i ~/.ssh/id_rsa -i {{ signed_key_path }} user@server
+      when: signed_key is defined

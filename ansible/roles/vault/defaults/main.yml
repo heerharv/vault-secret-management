@@ -1,0 +1,22 @@
+---
+# Vault role default variables
+vault_version: "1.10.3"
+vault_install_dir: "/usr/local/bin"
+vault_config_dir: "/etc/vault.d"
+vault_data_dir: "/opt/vault/data"
+vault_log_dir: "/opt/vault/logs"
+vault_user: "vault"
+vault_group: "vault"
+vault_addr: "http://127.0.0.1:8200"
+
+# Storage backend settings
+vault_storage_backend: "file"
+vault_file_path: "{{ vault_data_dir }}"
+
+# Listener settings
+vault_listener_address: "0.0.0.0:8200"
+vault_listener_tls_disable: "true"  # Set to false in production
+
+# TLS Settings (for production)
+vault_tls_cert_file: ""
+vault_tls_key_file: ""

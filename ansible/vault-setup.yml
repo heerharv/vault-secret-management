@@ -1,0 +1,100 @@
+---
+- name: Set up HashiCorp Vault
+  hosts: vault
+  become: true
+  vars:
+    vault_version: "1.10.3"
+    vault_install_dir: "/usr/local/bin"
+    vault_config_dir: "/etc/vault.d"
+    vault_data_dir: "/opt/vault/data"
+    vault_log_dir: "/opt/vault/logs"
+    vault_user: "vault"
+    vault_group: "vault"
+
+  tasks:
+    - name: Create Vault user
+      user:
+        name: "{{ vault_user }}"
+        system: true
+        shell: /bin/false
+        home: "/opt/vault"
+        create_home: true
+
+    - name: Create Vault directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ vault_user }}"
+        group: "{{ vault_group }}"
+        mode: 0750
+      loop:
+        - "{{ vault_config_dir }}"
+        - "{{ vault_data_dir }}"
+        - "{{ vault_log_dir }}"
+
+    - name: Download Vault binary
+      get_url:
+        url: "https://releases.hashicorp.com/vault/{{ vault_version }}/vault_{{ vault_version }}_linux_amd64.zip"
+        dest: "/tmp/vault_{{ vault_version }}_linux_amd64.zip"
+        mode: 0644
+
+    - name: Install unzip if not present
+      apt:
+        name: unzip
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Install unzip if not present (RedHat)
+      yum:
+        name: unzip
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Unzip Vault binary
+      unarchive:
+        src: "/tmp/vault_{{ vault_version }}_linux_amd64.zip"
+        dest: "{{ vault_install_dir }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: 0755
+
+    - name: Copy Vault configuration
+      template:
+        src: "{{ role_path }}/templates/vault.hcl.j2"
+        dest: "{{ vault_config_dir }}/vault.hcl"
+        owner: "{{ vault_user }}"
+        group: "{{ vault_group }}"
+        mode: 0640
+
+    - name: Install Vault systemd service
+      template:
+        src: "{{ role_path }}/templates/vault.service.j2"
+        dest: "/etc/systemd/system/vault.service"
+        owner: root
+        group: root
+        mode: 0644
+
+    - name: Enable and start Vault service
+      systemd:
+        name: vault
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Wait for Vault to start
+      wait_for:
+        port: 8200
+        delay: 5
+        timeout: 30
+
+    - name: Set VAULT_ADDR environment variable
+      lineinfile:
+        path: /etc/environment
+        line: 'VAULT_ADDR="http://127.0.0.1:8200"'
+        state: present
+
+- name: Include Vault role
+  hosts: vault
+  roles:
+    - vault
