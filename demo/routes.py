@@ -31,6 +31,17 @@ secrets_cache = {}
 
 def vault_client():
     """Create and return a Vault client"""
+    # Check if we should use the mock client (for demonstration)
+    use_mock = os.environ.get('USE_MOCK_VAULT', 'true').lower() == 'true'
+    
+    if use_mock:
+        # Import here to avoid circular imports
+        from mock_vault import MockVaultClient
+        logger.info("Using mock Vault client for demonstration")
+        os.environ.setdefault('MOCK_VAULT_TOKEN', 'mock-token')
+        return MockVaultClient(url=VAULT_ADDR, token='mock-token')
+    
+    # Use real Vault client
     if not VAULT_TOKEN:
         logger.error("VAULT_TOKEN environment variable not set!")
         return None
@@ -300,12 +311,20 @@ def generate_ssh_demo(client):
         # 2. Sign it with Vault
         # 3. Return the signed certificate
         
-        # Here we'll just show the SSH roles available
-        response = requests.get(
-            f"{VAULT_ADDR}/v1/ssh/roles",
-            headers={"X-Vault-Token": VAULT_TOKEN}
-        )
-        response.raise_for_status()
+        # Check if we're using mock vault
+        use_mock = os.environ.get('USE_MOCK_VAULT', 'true').lower() == 'true'
+        
+        if use_mock:
+            # Use the mock client's roles directly
+            available_roles = getattr(client, 'roles', {}).get('ssh', ['admin-role', 'dev-role'])
+        else:
+            # Here we'll just show the SSH roles available from real Vault
+            response = requests.get(
+                f"{VAULT_ADDR}/v1/ssh/roles",
+                headers={"X-Vault-Token": VAULT_TOKEN}
+            )
+            response.raise_for_status()
+            available_roles = response.json().get('data', {}).get('keys', [])
         
         # Record in database
         try:
@@ -334,7 +353,7 @@ def generate_ssh_demo(client):
         return jsonify({
             'status': 'ok',
             'message': 'SSH certificate generation demo',
-            'available_roles': response.json().get('data', {}).get('keys', []),
+            'available_roles': available_roles,
             'instructions': [
                 'In a real application, you would:',
                 '1. Upload your SSH public key',
@@ -355,11 +374,20 @@ def generate_ssh_demo(client):
 def list_aws_roles(client):
     """List available AWS roles"""
     try:
-        response = requests.get(
-            f"{VAULT_ADDR}/v1/aws/roles",
-            headers={"X-Vault-Token": VAULT_TOKEN}
-        )
-        response.raise_for_status()
+        # Check if we're using mock vault
+        use_mock = os.environ.get('USE_MOCK_VAULT', 'true').lower() == 'true'
+        
+        if use_mock:
+            # Use the mock client's roles directly
+            available_roles = getattr(client, 'roles', {}).get('aws', ['readonly', 'ec2-admin'])
+        else:
+            # Real Vault server
+            response = requests.get(
+                f"{VAULT_ADDR}/v1/aws/roles",
+                headers={"X-Vault-Token": VAULT_TOKEN}
+            )
+            response.raise_for_status()
+            available_roles = response.json().get('data', {}).get('keys', [])
         
         # Record in database
         try:
@@ -387,7 +415,7 @@ def list_aws_roles(client):
         
         return jsonify({
             'status': 'ok',
-            'available_roles': response.json().get('data', {}).get('keys', []),
+            'available_roles': available_roles,
             'instructions': [
                 'To generate AWS credentials:',
                 '1. Use the Ansible playbook: aws-credential-rotation.yml',
