@@ -1,0 +1,9 @@
+Generic single-database configuration for Flask-Migrate.
+
+To generate migrations:
+1. First time setup: flask db init (already done)
+2. Create migration: flask db migrate -m "description of changes"
+3. Apply migration: flask db upgrade
+
+For more information, see the Flask-Migrate documentation:
+https://flask-migrate.readthedocs.io/en/latest/

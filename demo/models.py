@@ -32,44 +32,96 @@ class Secret(db.Model):
     """Model for storing secret metadata"""
     __tablename__ = 'secrets'
     
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    path = db.Column(db.String(255), nullable=False)
-    type = db.Column(db.Enum(SecretType), nullable=False)
-    description = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    path: Mapped[str] = mapped_column(String(255), nullable=False)
+    type: Mapped[SecretType] = mapped_column(db.Enum(SecretType), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    access_logs = db.relationship('AccessLog', backref='secret', lazy=True, cascade="all, delete-orphan")
+    access_logs: Mapped[List["AccessLog"]] = relationship(
+        "AccessLog", 
+        back_populates="secret", 
+        cascade="all, delete-orphan",
+        lazy="select"
+    )
     
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Secret {self.name} ({self.type.value})>"
+        
+    @property
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert Secret to dictionary for API responses"""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "path": self.path,
+            "type": self.type.value,
+            "description": self.description,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat()
+        }
 
 class AccessLog(db.Model):
     """Model for logging secret access"""
     __tablename__ = 'access_logs'
     
-    id = db.Column(db.Integer, primary_key=True)
-    secret_id = db.Column(db.Integer, db.ForeignKey('secrets.id'), nullable=False)
-    action = db.Column(db.Enum(SecretAction), nullable=False)
-    client_ip = db.Column(db.String(50))
-    user_agent = db.Column(db.String(255))
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    success = db.Column(db.Boolean, default=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    secret_id: Mapped[int] = mapped_column(Integer, ForeignKey('secrets.id'), nullable=False)
+    action: Mapped[SecretAction] = mapped_column(db.Enum(SecretAction), nullable=False)
+    client_ip: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    success: Mapped[bool] = mapped_column(Boolean, default=True)
     
-    def __repr__(self):
+    # Relationships
+    secret: Mapped["Secret"] = relationship("Secret", back_populates="access_logs")
+    
+    def __repr__(self) -> str:
         return f"<AccessLog {self.action.value} on Secret #{self.secret_id} at {self.timestamp}>"
+        
+    @property
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert AccessLog to dictionary for API responses"""
+        return {
+            "id": self.id,
+            "secret_id": self.secret_id,
+            "action": self.action.value,
+            "client_ip": self.client_ip,
+            "user_agent": self.user_agent,
+            "timestamp": self.timestamp.isoformat(),
+            "success": self.success
+        }
 
 class VaultRole(db.Model):
     """Model for storing Vault roles"""
     __tablename__ = 'vault_roles'
     
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False, unique=True)
-    description = db.Column(db.Text)
-    policies = db.Column(db.Text)  # Comma-separated list of policies
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    policies: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Comma-separated list of policies
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<VaultRole {self.name}>"
+        
+    @property
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert VaultRole to dictionary for API responses"""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "policies": self.policies.split(",") if self.policies else [],
+            "created_at": self.created_at.isoformat()
+        }
+        
+    @property
+    def policy_list(self) -> List[str]:
+        """Return list of policies from comma-separated string"""
+        if not self.policies:
+            return []
+        return [p.strip() for p in self.policies.split(",")]
