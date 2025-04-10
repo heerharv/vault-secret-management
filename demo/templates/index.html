@@ -128,6 +128,70 @@
                     </div>
                 </div>
                 
+                <!-- Database Access Logs -->
+                <div class="card mt-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Recent Access Logs</h5>
+                        <button id="viewAllLogs" class="btn btn-sm btn-outline-primary">View All</button>
+                    </div>
+                    <div class="card-body">
+                        {% if recent_logs %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Secret</th>
+                                        <th>Action</th>
+                                        <th>Time</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for log in recent_logs %}
+                                    <tr>
+                                        <td>{{ log.secret_name }}</td>
+                                        <td>{{ log.action }}</td>
+                                        <td>{{ log.timestamp }}</td>
+                                        <td>
+                                            {% if log.success %}
+                                            <span class="badge bg-success">Success</span>
+                                            {% else %}
+                                            <span class="badge bg-danger">Failed</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-muted">No access logs recorded yet. Try fetching some secrets.</p>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Secrets Overview -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Secrets Overview</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            {% for secret_type, count in secret_counts.items() %}
+                            <div class="col-md-3 col-sm-6 mb-3">
+                                <div class="card bg-light">
+                                    <div class="card-body text-center">
+                                        <h6>{{ secret_type }}</h6>
+                                        <h3>{{ count }}</h3>
+                                        <p class="text-muted small">stored secrets</p>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="card mt-4">
                     <div class="card-header">
                         <h5 class="mb-0">How It Works</h5>
@@ -547,6 +611,82 @@ print(f"Lease Duration: {aws_creds['lease_duration']} seconds")</pre>
         document.getElementById('clearCache').addEventListener('click', async () => {
             await fetchAPI('clear-cache');
             alert('Secret cache cleared.');
+        });
+        
+        // View all logs button
+        document.getElementById('viewAllLogs').addEventListener('click', async () => {
+            const logs = await fetchAPI('database/access-logs');
+            if (logs.status === 'ok' && logs.logs && logs.logs.length > 0) {
+                let html = `
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Secret</th>
+                                    <th>Type</th>
+                                    <th>Action</th>
+                                    <th>Time</th>
+                                    <th>Client IP</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                logs.logs.forEach(log => {
+                    html += `
+                        <tr>
+                            <td>${log.secret_name}</td>
+                            <td>${log.secret_type}</td>
+                            <td>${log.action}</td>
+                            <td>${log.timestamp}</td>
+                            <td>${log.client_ip}</td>
+                            <td>
+                                ${log.success 
+                                    ? '<span class="badge bg-success">Success</span>' 
+                                    : '<span class="badge bg-danger">Failed</span>'}
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                
+                const modal = document.createElement('div');
+                modal.className = 'modal fade';
+                modal.id = 'logsModal';
+                modal.setAttribute('tabindex', '-1');
+                modal.innerHTML = `
+                    <div class="modal-dialog modal-xl">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Access Logs</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                ${html}
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+                const modalInstance = new bootstrap.Modal(modal);
+                modalInstance.show();
+                
+                modal.addEventListener('hidden.bs.modal', () => {
+                    document.body.removeChild(modal);
+                });
+            } else {
+                alert('No logs found or error retrieving logs.');
+            }
         });
 
         // Initial status check
