@@ -2,9 +2,17 @@
 Database models for the Vault demo application
 """
 
-from datetime import datetime
 import enum
+import logging
+from datetime import datetime
+from typing import List, Optional, Dict, Any
+
+from sqlalchemy import ForeignKey, String, Integer, Text, DateTime, Boolean
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from main import db
+
+logger = logging.getLogger(__name__)
 
 class SecretType(enum.Enum):
     """Enum for different types of secrets"""
