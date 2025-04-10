@@ -1,0 +1,330 @@
+{% extends "layout.html" %}
+
+{% block title %}AWS Credentials - Vault Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">AWS Credential Management</h1>
+            <p class="text-muted fs-6">Generate and rotate AWS credentials dynamically</p>
+        </div>
+        <div>
+            <button id="refreshRoles" class="btn btn-primary">
+                <i class="fas fa-sync-alt me-2"></i> Refresh
+            </button>
+        </div>
+    </div>
+    
+    <!-- AWS Roles -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Available AWS Roles</h5>
+            <button class="btn btn-sm btn-primary" id="awsRolesDemo">
+                <i class="fab fa-aws me-1"></i> Show Roles
+            </button>
+        </div>
+        <div class="card-body">
+            {% if aws_roles %}
+                <div class="row">
+                    {% for role in aws_roles %}
+                        <div class="col-md-3 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">{{ role }}</h5>
+                                    <p class="card-text">
+                                        <span class="badge bg-warning">AWS Role</span>
+                                    </p>
+                                    <button class="btn btn-sm btn-outline-primary generate-creds" data-role="{{ role }}">
+                                        <i class="fas fa-key me-1"></i> Generate Credentials
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="alert alert-info mb-0">
+                    <i class="fas fa-info-circle me-2"></i> No AWS roles found. Configure AWS secret engine in Vault to get started.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- AWS Credentials Demo -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">AWS Credential Rotation Workflow</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="timeline">
+                        <div class="timeline-item">
+                            <div class="timeline-icon">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <div class="timeline-content">
+                                <h5>Request Credentials</h5>
+                                <p>Application requests AWS credentials from Vault</p>
+                                <pre class="terminal-output">$ vault read aws/creds/readonly</pre>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <div class="timeline-icon">
+                                <i class="fas fa-key"></i>
+                            </div>
+                            <div class="timeline-content">
+                                <h5>Vault Generates Credentials</h5>
+                                <p>Vault creates temporary IAM credentials with specific permissions</p>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <div class="timeline-icon">
+                                <i class="fas fa-cloud"></i>
+                            </div>
+                            <div class="timeline-content">
+                                <h5>Use AWS Services</h5>
+                                <p>Application uses credentials to access AWS services</p>
+                                <pre class="terminal-output">$ AWS_ACCESS_KEY_ID=AKIA... \
+$ AWS_SECRET_ACCESS_KEY=... \
+$ aws s3 ls</pre>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <div class="timeline-icon">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="timeline-content">
+                                <h5>Lease Expiration</h5>
+                                <p>Credentials are automatically revoked when the lease expires</p>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <div class="timeline-icon">
+                                <i class="fas fa-sync-alt"></i>
+                            </div>
+                            <div class="timeline-content">
+                                <h5>Request New Credentials</h5>
+                                <p>Application requests new credentials when needed</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0">Try It Now</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="awsCredsForm">
+                                <div class="mb-3">
+                                    <label for="awsRole" class="form-label">AWS Role</label>
+                                    <select class="form-select" id="awsRole">
+                                        {% for role in aws_roles %}
+                                            <option value="{{ role }}">{{ role }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="ttl" class="form-label">TTL (Time to Live)</label>
+                                    <select class="form-select" id="ttl">
+                                        <option value="1h">1 Hour</option>
+                                        <option value="12h" selected>12 Hours</option>
+                                        <option value="24h">24 Hours</option>
+                                        <option value="48h">48 Hours</option>
+                                        <option value="72h">72 Hours</option>
+                                    </select>
+                                </div>
+                                <button type="button" id="generateCredsBtn" class="btn btn-primary">Generate Credentials</button>
+                            </form>
+                            
+                            <div id="generatedCreds" style="display: none;" class="mt-4">
+                                <h6>Generated Credentials</h6>
+                                <div class="alert alert-success">
+                                    <i class="fas fa-check-circle me-2"></i> AWS credentials generated successfully!
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Access Key ID</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="accessKeyId" readonly>
+                                        <button class="btn btn-outline-secondary" type="button" onclick="copyToClipboard(document.getElementById('accessKeyId').value)">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Secret Access Key</label>
+                                    <div class="input-group">
+                                        <input type="password" id="secretAccessKey" class="form-control" readonly>
+                                        <button class="btn btn-outline-secondary toggle-secret" type="button" data-target="secretAccessKey">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button class="btn btn-outline-secondary" type="button" onclick="copyToClipboard(document.getElementById('secretAccessKey').value)">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <h6>Lease Information</h6>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="fw-medium">Lease ID:</span>
+                                        <span id="leaseId" class="text-truncate" style="max-width: 250px;"></span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="fw-medium">Lease Duration:</span>
+                                        <span id="leaseDuration"></span>
+                                    </div>
+                                    <div class="expiration-indicator">
+                                        <div class="expiration-bar">
+                                            <div class="expiration-progress expiration-active" style="width: 100%;"></div>
+                                        </div>
+                                        <span class="expiration-text" id="expirationText"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-4">
+                                <h6>AWS CLI Configuration</h6>
+                                <p>To configure the AWS CLI with these credentials:</p>
+                                <pre class="terminal-output" id="awsConfigCmd">$ aws configure set aws_access_key_id AKIA...
+$ aws configure set aws_secret_access_key ...
+$ aws configure set region us-east-1</pre>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard(document.getElementById('awsConfigCmd').textContent)">
+                                    <i class="fas fa-copy me-1"></i> Copy Commands
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent AWS Activity -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">Recent AWS Activity</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Secret</th>
+                            <th>Action</th>
+                            <th>Time</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if aws_logs %}
+                            {% for log in aws_logs %}
+                            <tr>
+                                <td>{{ log.secret_name }}</td>
+                                <td>{{ log.action }}</td>
+                                <td>{{ log.timestamp }}</td>
+                                <td>
+                                    {% if log.success %}
+                                    <span class="badge bg-success">Success</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Failed</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center py-3">No AWS activity recorded yet.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // AWS Demo button
+        document.getElementById('awsRolesDemo').addEventListener('click', async function() {
+            try {
+                window.showLoading();
+                const result = await fetchAPI('aws/roles');
+                window.hideLoading();
+                
+                if (result.status === 'ok') {
+                    window.showToast('AWS roles retrieved successfully', 'success');
+                } else {
+                    window.showToast('Error: ' + result.message, 'error');
+                }
+            } catch (error) {
+                window.hideLoading();
+                window.showToast('Error: ' + error.message, 'error');
+            }
+        });
+        
+        // Generate AWS Credentials button
+        document.getElementById('generateCredsBtn').addEventListener('click', function() {
+            // In a real app, this would call the Vault API
+            const role = document.getElementById('awsRole').value;
+            const ttl = document.getElementById('ttl').value;
+            
+            // Simulate credential generation
+            window.showLoading();
+            setTimeout(() => {
+                window.hideLoading();
+                
+                // Generate random-looking but fake credentials
+                const accessKeyId = `AKIA${Math.random().toString(36).substring(2, 10).toUpperCase()}${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+                const secretKey = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+                const leaseId = `aws/creds/${role}/${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+                const leaseDuration = ttl === '1h' ? 3600 : ttl === '12h' ? 43200 : ttl === '24h' ? 86400 : ttl === '48h' ? 172800 : 259200;
+                
+                document.getElementById('accessKeyId').value = accessKeyId;
+                document.getElementById('secretAccessKey').value = secretKey;
+                document.getElementById('leaseId').textContent = leaseId;
+                document.getElementById('leaseDuration').textContent = `${leaseDuration / 3600} hours`;
+                document.getElementById('expirationText').textContent = 'Just generated';
+                
+                document.getElementById('awsConfigCmd').textContent = 
+                    `$ aws configure set aws_access_key_id ${accessKeyId}
+$ aws configure set aws_secret_access_key ${secretKey}
+$ aws configure set region us-east-1`;
+                
+                document.getElementById('generatedCreds').style.display = 'block';
+                
+                window.showToast('AWS credentials generated successfully!', 'success');
+            }, 1500);
+        });
+        
+        // Toggle secret visibility
+        document.querySelectorAll('.toggle-secret').forEach(function(button) {
+            button.addEventListener('click', function() {
+                const targetId = this.getAttribute('data-target');
+                const secretField = document.getElementById(targetId);
+                const icon = this.querySelector('i');
+                
+                if (secretField.type === 'password') {
+                    secretField.type = 'text';
+                    icon.classList.remove('fa-eye');
+                    icon.classList.add('fa-eye-slash');
+                } else {
+                    secretField.type = 'password';
+                    icon.classList.remove('fa-eye-slash');
+                    icon.classList.add('fa-eye');
+                }
+            });
+        });
+        
+        // Refresh roles button
+        document.getElementById('refreshRoles').addEventListener('click', function() {
+            window.location.reload();
+        });
+    });
+</script>
+{% endblock %}

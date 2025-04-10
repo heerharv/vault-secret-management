@@ -2,13 +2,17 @@
 
 {% block title %}Activity Logs - Vault Manager{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.css">
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
     <!-- Page Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h1 class="h3 mb-1">Activity Logs</h1>
-            <p class="text-muted fs-6">Track all secret access and operations</p>
+            <p class="text-muted fs-6">Track and analyze secret access history</p>
         </div>
         <div>
             <button id="refreshLogs" class="btn btn-primary">
@@ -161,6 +165,30 @@
         </div>
     </div>
     
+    <!-- Activity Analytics -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Activity by Secret Type</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="secretTypeChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Activity Timeline</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="timelineChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Log Details Modal -->
     <div class="modal fade" id="logDetailsModal" tabindex="-1" aria-labelledby="logDetailsModalLabel" aria-hidden="true">
         <div class="modal-dialog">
@@ -180,30 +208,6 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Analytics Section -->
-    <div class="row mt-4">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Access by Secret Type</h5>
-                </div>
-                <div class="card-body">
-                    <canvas id="secretTypeChart" height="300"></canvas>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Activity Over Time</h5>
-                </div>
-                <div class="card-body">
-                    <canvas id="activityTimelineChart" height="300"></canvas>
                 </div>
             </div>
         </div>
@@ -612,7 +616,7 @@
                 }
             });
             
-            // Prepare data for activity timeline chart
+            // Prepare data for timeline chart
             const timelineData = {};
             
             logs.forEach(function(log) {
@@ -624,8 +628,8 @@
             const sortedDates = Object.keys(timelineData).sort();
             const activityData = sortedDates.map(date => timelineData[date]);
             
-            // Create activity timeline chart
-            const timelineCtx = document.getElementById('activityTimelineChart').getContext('2d');
+            // Create timeline chart
+            const timelineCtx = document.getElementById('timelineChart').getContext('2d');
             if (window.timelineChart) {
                 window.timelineChart.destroy();
             }

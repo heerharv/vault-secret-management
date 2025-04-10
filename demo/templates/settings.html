@@ -1,0 +1,293 @@
+{% extends "layout.html" %}
+
+{% block title %}Settings - Vault Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">Settings</h1>
+            <p class="text-muted fs-6">Configure Vault Manager settings</p>
+        </div>
+        <div>
+            <button id="saveSettings" class="btn btn-primary">
+                <i class="fas fa-save me-2"></i> Save Changes
+            </button>
+        </div>
+    </div>
+    
+    <!-- Settings Form -->
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Vault Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form id="settingsForm">
+                        <div class="mb-3">
+                            <label for="vaultAddr" class="form-label">Vault Server Address</label>
+                            <input type="url" class="form-control" id="vaultAddr" value="{{ vault_addr }}">
+                            <div class="form-text">The URL of your Vault server (e.g., http://127.0.0.1:8200)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="vaultToken" class="form-label">Vault Token</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="vaultToken" placeholder="Enter your Vault token">
+                                <button class="btn btn-outline-secondary toggle-secret" type="button" data-target="vaultToken">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                            <div class="form-text">Used for authentication to Vault. Never share your token!</div>
+                        </div>
+                        
+                        <div class="mb-3 form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="useMock" {% if use_mock %}checked{% endif %}>
+                            <label class="form-check-label" for="useMock">Use Mock Vault (for demonstration)</label>
+                            <div class="form-text">Enable mock Vault client for testing without a real Vault server</div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="mb-3">
+                            <label for="secretMountPoint" class="form-label">Secrets Engine Mount Point</label>
+                            <input type="text" class="form-control" id="secretMountPoint" value="secret">
+                            <div class="form-text">The mount point for the KV secrets engine (e.g., secret)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="kvVersion" class="form-label">KV Secrets Engine Version</label>
+                            <select class="form-select" id="kvVersion">
+                                <option value="1">Version 1</option>
+                                <option value="2" selected>Version 2</option>
+                            </select>
+                            <div class="form-text">The version of the KV secrets engine (v1 or v2)</div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Application Settings</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="appSecretKey" class="form-label">Application Secret Key</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="appSecretKey" value="vault-demo-secret-key">
+                            <button class="btn btn-outline-secondary toggle-secret" type="button" data-target="appSecretKey">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-outline-secondary" type="button" id="generateSecretKey">
+                                <i class="fas fa-random"></i>
+                            </button>
+                        </div>
+                        <div class="form-text">Used for Flask session security (will be updated in environment)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="logLevel" class="form-label">Log Level</label>
+                        <select class="form-select" id="logLevel">
+                            <option value="DEBUG">Debug</option>
+                            <option value="INFO" selected>Info</option>
+                            <option value="WARNING">Warning</option>
+                            <option value="ERROR">Error</option>
+                        </select>
+                        <div class="form-text">Set the application logging level</div>
+                    </div>
+                    
+                    <div class="mb-3 form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="debugMode" checked>
+                        <label class="form-check-label" for="debugMode">Enable Debug Mode</label>
+                        <div class="form-text">Run Flask in debug mode (not recommended for production)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Connection Status</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-3">
+                        <span class="fw-medium">Vault Server:</span>
+                        <span>
+                            <span class="status-indicator {% if vault_status == 'Connected' %}status-active{% else %}status-inactive{% endif %}"></span>
+                            {{ vault_status }}
+                        </span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-3">
+                        <span class="fw-medium">Database:</span>
+                        <span>
+                            <span class="status-indicator status-active"></span>
+                            Connected
+                        </span>
+                    </div>
+                    <button id="testConnection" class="btn btn-outline-primary w-100">
+                        <i class="fas fa-plug me-2"></i> Test Vault Connection
+                    </button>
+                </div>
+            </div>
+            
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button id="clearCache" class="btn btn-outline-warning">
+                            <i class="fas fa-trash me-2"></i> Clear Secret Cache
+                        </button>
+                        <button id="syncRoles" class="btn btn-outline-primary">
+                            <i class="fas fa-sync me-2"></i> Sync Vault Roles
+                        </button>
+                        <button id="backupDatabase" class="btn btn-outline-info">
+                            <i class="fas fa-database me-2"></i> Backup Database
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Environment</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="fw-medium">Version:</span>
+                        <span>1.0.0</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="fw-medium">Flask:</span>
+                        <span>2.3.2</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="fw-medium">Python:</span>
+                        <span>3.11.4</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="fw-medium">SQLAlchemy:</span>
+                        <span>2.0.19</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Toggle secret visibility
+        document.querySelectorAll('.toggle-secret').forEach(function(button) {
+            button.addEventListener('click', function() {
+                const targetId = this.getAttribute('data-target');
+                const secretField = document.getElementById(targetId);
+                const icon = this.querySelector('i');
+                
+                if (secretField.type === 'password') {
+                    secretField.type = 'text';
+                    icon.classList.remove('fa-eye');
+                    icon.classList.add('fa-eye-slash');
+                } else {
+                    secretField.type = 'password';
+                    icon.classList.remove('fa-eye-slash');
+                    icon.classList.add('fa-eye');
+                }
+            });
+        });
+        
+        // Generate random secret key
+        document.getElementById('generateSecretKey').addEventListener('click', function() {
+            const randomKey = generateRandomString(32);
+            document.getElementById('appSecretKey').value = randomKey;
+            window.showToast('New secret key generated', 'info');
+        });
+        
+        // Test connection button
+        document.getElementById('testConnection').addEventListener('click', async function() {
+            try {
+                window.showLoading();
+                const result = await fetchAPI('status');
+                window.hideLoading();
+                
+                if (result.status === 'ok') {
+                    window.showToast('Successfully connected to Vault server!', 'success');
+                } else {
+                    window.showToast('Error connecting to Vault: ' + result.message, 'error');
+                }
+            } catch (error) {
+                window.hideLoading();
+                window.showToast('Error connecting to Vault: ' + error.message, 'error');
+            }
+        });
+        
+        // Clear cache button
+        document.getElementById('clearCache').addEventListener('click', async function() {
+            try {
+                window.showLoading();
+                const result = await fetchAPI('clear-cache');
+                window.hideLoading();
+                
+                if (result.status === 'ok') {
+                    window.showToast('Secret cache cleared successfully', 'success');
+                } else {
+                    window.showToast('Error clearing cache: ' + result.message, 'error');
+                }
+            } catch (error) {
+                window.hideLoading();
+                window.showToast('Error clearing cache: ' + error.message, 'error');
+            }
+        });
+        
+        // Sync roles button
+        document.getElementById('syncRoles').addEventListener('click', function() {
+            window.showLoading();
+            
+            // Simulate sync
+            setTimeout(() => {
+                window.hideLoading();
+                window.showToast('Vault roles synchronized successfully', 'success');
+            }, 1500);
+        });
+        
+        // Backup database button
+        document.getElementById('backupDatabase').addEventListener('click', function() {
+            window.showLoading();
+            
+            // Simulate backup
+            setTimeout(() => {
+                window.hideLoading();
+                window.showToast('Database backup created successfully', 'success');
+            }, 2000);
+        });
+        
+        // Save settings button
+        document.getElementById('saveSettings').addEventListener('click', function() {
+            window.showLoading();
+            
+            // Simulate saving settings
+            setTimeout(() => {
+                window.hideLoading();
+                window.showToast('Settings saved successfully', 'success');
+            }, 1000);
+        });
+        
+        // Helper function to generate random string
+        function generateRandomString(length) {
+            const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+';
+            let result = '';
+            for (let i = 0; i < length; i++) {
+                result += characters.charAt(Math.floor(Math.random() * characters.length));
+            }
+            return result;
+        }
+    });
+</script>
+{% endblock %}

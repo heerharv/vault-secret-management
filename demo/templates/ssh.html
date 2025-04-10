@@ -1,0 +1,304 @@
+{% extends "layout.html" %}
+
+{% block title %}SSH Certificates - Vault Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">SSH Certificate Management</h1>
+            <p class="text-muted fs-6">Manage SSH Certificate Authority and sign certificates</p>
+        </div>
+        <div>
+            <button id="refreshRoles" class="btn btn-primary">
+                <i class="fas fa-sync-alt me-2"></i> Refresh
+            </button>
+        </div>
+    </div>
+    
+    <!-- SSH Roles -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Available SSH Roles</h5>
+            <button class="btn btn-sm btn-primary" id="sshDemo">
+                <i class="fas fa-terminal me-1"></i> Demo Signing
+            </button>
+        </div>
+        <div class="card-body">
+            {% if ssh_roles %}
+                <div class="row">
+                    {% for role in ssh_roles %}
+                        <div class="col-md-3 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">{{ role }}</h5>
+                                    <p class="card-text">
+                                        <span class="badge bg-info">SSH Role</span>
+                                    </p>
+                                    <button class="btn btn-sm btn-outline-primary sign-key" data-role="{{ role }}">
+                                        <i class="fas fa-signature me-1"></i> Sign Key
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="alert alert-info mb-0">
+                    <i class="fas fa-info-circle me-2"></i> No SSH roles found. Configure SSH CA in Vault to get started.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- SSH Certificate Demo -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">SSH Certificate Workflow</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="timeline">
+                        <div class="timeline-item">
+                            <div class="timeline-icon">
+                                <i class="fas fa-key"></i>
+                            </div>
+                            <div class="timeline-content">
+                                <h5>Generate SSH Key Pair</h5>
+                                <p>User or system generates an SSH key pair locally</p>
+                                <pre class="terminal-output">$ ssh-keygen -t rsa -b 4096 -C "user@example.com"</pre>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <div class="timeline-icon">
+                                <i class="fas fa-upload"></i>
+                            </div>
+                            <div class="timeline-content">
+                                <h5>Submit Public Key to Vault</h5>
+                                <p>The public key is sent to Vault for signing</p>
+                                <pre class="terminal-output">$ cat ~/.ssh/id_rsa.pub | curl -X POST -d @- \
+  -H "X-Vault-Token: $VAULT_TOKEN" \
+  $VAULT_ADDR/v1/ssh/sign/admin-role</pre>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <div class="timeline-icon">
+                                <i class="fas fa-certificate"></i>
+                            </div>
+                            <div class="timeline-content">
+                                <h5>Vault Signs Certificate</h5>
+                                <p>Vault signs the public key with its CA, creating a certificate</p>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <div class="timeline-icon">
+                                <i class="fas fa-download"></i>
+                            </div>
+                            <div class="timeline-content">
+                                <h5>Download Certificate</h5>
+                                <p>User downloads and saves the signed certificate</p>
+                                <pre class="terminal-output">$ curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
+  $VAULT_ADDR/v1/ssh/sign/admin-role | jq -r '.data.signed_key' \
+  > ~/.ssh/id_rsa-cert.pub</pre>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <div class="timeline-icon">
+                                <i class="fas fa-sign-in-alt"></i>
+                            </div>
+                            <div class="timeline-content">
+                                <h5>Authentication</h5>
+                                <p>User can now authenticate to servers that trust Vault's CA</p>
+                                <pre class="terminal-output">$ ssh -i ~/.ssh/id_rsa user@server</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0">Try It Now</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="sshSignForm">
+                                <div class="mb-3">
+                                    <label for="sshPublicKey" class="form-label">SSH Public Key</label>
+                                    <textarea class="form-control" id="sshPublicKey" rows="5" placeholder="Paste your SSH public key here..."></textarea>
+                                    <div class="form-text">Your public key typically starts with 'ssh-rsa' or 'ssh-ed25519'</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="sshRole" class="form-label">Sign with Role</label>
+                                    <select class="form-select" id="sshRole">
+                                        {% for role in ssh_roles %}
+                                            <option value="{{ role }}">{{ role }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="validPrincipals" class="form-label">Valid Principals</label>
+                                    <input type="text" class="form-control" id="validPrincipals" placeholder="e.g., admin,ubuntu,ec2-user">
+                                    <div class="form-text">Comma-separated list of usernames that can use this certificate</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="ttl" class="form-label">TTL (Time to Live)</label>
+                                    <select class="form-select" id="ttl">
+                                        <option value="1h">1 Hour</option>
+                                        <option value="12h">12 Hours</option>
+                                        <option value="24h" selected>24 Hours</option>
+                                        <option value="48h">48 Hours</option>
+                                        <option value="72h">72 Hours</option>
+                                        <option value="168h">1 Week</option>
+                                    </select>
+                                </div>
+                                <button type="button" id="signKeyBtn" class="btn btn-primary">Sign Key</button>
+                            </form>
+                            
+                            <div id="signedCertificate" style="display: none;" class="mt-4">
+                                <h6>Signed Certificate</h6>
+                                <div class="alert alert-success">
+                                    <i class="fas fa-check-circle me-2"></i> Certificate successfully signed!
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Certificate</label>
+                                    <div class="input-group">
+                                        <textarea class="form-control" id="certificateOutput" rows="5" readonly></textarea>
+                                        <button class="btn btn-outline-secondary" type="button" onclick="copyToClipboard(document.getElementById('certificateOutput').value)">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <small class="text-muted">Save this to a file with .pub extension</small>
+                                    <button class="btn btn-sm btn-outline-primary" id="downloadCertBtn">
+                                        <i class="fas fa-download me-1"></i> Download
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent SSH Activity -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">Recent SSH Activity</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Secret</th>
+                            <th>Action</th>
+                            <th>Time</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if ssh_logs %}
+                            {% for log in ssh_logs %}
+                            <tr>
+                                <td>{{ log.secret_name }}</td>
+                                <td>{{ log.action }}</td>
+                                <td>{{ log.timestamp }}</td>
+                                <td>
+                                    {% if log.success %}
+                                    <span class="badge bg-success">Success</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Failed</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center py-3">No SSH activity recorded yet.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // SSH Demo button
+        document.getElementById('sshDemo').addEventListener('click', async function() {
+            try {
+                window.showLoading();
+                const result = await fetchAPI('ssh/generate');
+                window.hideLoading();
+                
+                if (result.status === 'ok') {
+                    window.showToast('SSH demo executed successfully', 'success');
+                } else {
+                    window.showToast('Error: ' + result.message, 'error');
+                }
+            } catch (error) {
+                window.hideLoading();
+                window.showToast('Error: ' + error.message, 'error');
+            }
+        });
+        
+        // Sign Key button
+        document.getElementById('signKeyBtn').addEventListener('click', function() {
+            // In a real app, this would call the Vault API
+            const publicKey = document.getElementById('sshPublicKey').value;
+            const role = document.getElementById('sshRole').value;
+            
+            if (!publicKey) {
+                window.showToast('Please paste your SSH public key', 'warning');
+                return;
+            }
+            
+            // Simulate signing
+            window.showLoading();
+            setTimeout(() => {
+                window.hideLoading();
+                
+                document.getElementById('certificateOutput').value = 
+                    `ssh-rsa-cert-v01@openssh.com AAAAB3Nza...EXAMPLE...${Date.now()}
+                    Type: user certificate
+                    Public key: RSA-CERT SHA256:abcdefg123456
+                    Signing CA: RSA SHA256:vault-ca-example
+                    Key ID: "vault-${role}-${Date.now()}"
+                    Valid principals: ${document.getElementById('validPrincipals').value || 'admin'}
+                    Valid from: 2025-04-10 to 2025-04-11
+                    Permissions: force-command, port-forwarding, pty, user-rc`;
+                
+                document.getElementById('signedCertificate').style.display = 'block';
+                
+                window.showToast('SSH key signed successfully!', 'success');
+            }, 1500);
+        });
+        
+        // Download Certificate button
+        document.getElementById('downloadCertBtn').addEventListener('click', function() {
+            const certificate = document.getElementById('certificateOutput').value;
+            const blob = new Blob([certificate], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'id_rsa-cert.pub';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+        
+        // Refresh roles button
+        document.getElementById('refreshRoles').addEventListener('click', function() {
+            window.location.reload();
+        });
+    });
+</script>
+{% endblock %}
