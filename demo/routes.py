@@ -87,8 +87,9 @@ def log_access(secret_id, action, success=True):
 
 @vault_api.route('/')
 def index():
-    """Main page"""
+    """Main page - dashboard"""
     vault_status = "Connected" if vault_client() else "Disconnected"
+    vault_addr = os.environ.get('VAULT_ADDR', 'http://127.0.0.1:8200')
     
     # Get count of secrets by type
     secret_counts = {}
@@ -116,10 +117,26 @@ def index():
     except Exception as e:
         logger.error(f"Error getting recent logs: {e}")
     
-    return render_template('index.html', 
-                           vault_status=vault_status,
-                           secret_counts=secret_counts,
-                           recent_logs=recent_logs)
+    # Get stats for dashboard
+    total_secrets = Secret.query.count()
+    total_roles = VaultRole.query.count()
+    access_logs_count = AccessLog.query.count()
+    ssh_certs_issued = AccessLog.query.join(Secret).filter(
+        Secret.type == SecretType.SSH,
+        AccessLog.action == SecretAction.READ,
+        AccessLog.success == True
+    ).count()
+    
+    return render_template('dashboard.html', 
+                          active_page='dashboard',
+                          vault_status=vault_status,
+                          vault_addr=vault_addr,
+                          secret_counts=secret_counts,
+                          recent_logs=recent_logs,
+                          total_secrets=total_secrets,
+                          total_roles=total_roles,
+                          access_logs_count=access_logs_count,
+                          ssh_certs_issued=ssh_certs_issued)
 
 @vault_api.route('/api/status')
 def status():
@@ -551,3 +568,208 @@ def list_access_logs():
             'status': 'error',
             'message': str(e)
         }), 500
+
+# Page Routes for UI
+@vault_api.route('/secrets')
+def secrets_page():
+    """Secrets management page"""
+    vault_status = "Connected" if vault_client() else "Disconnected"
+    
+    # Get all secrets
+    secrets = []
+    try:
+        db_secrets = Secret.query.all()
+        for secret in db_secrets:
+            # Count access logs
+            read_count = AccessLog.query.filter_by(
+                secret_id=secret.id, 
+                action=SecretAction.READ
+            ).count()
+            
+            last_access = AccessLog.query.filter_by(
+                secret_id=secret.id
+            ).order_by(AccessLog.timestamp.desc()).first()
+            
+            secrets.append({
+                'id': secret.id,
+                'name': secret.name,
+                'path': secret.path,
+                'type': secret.type.value,
+                'description': secret.description,
+                'created_at': secret.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                'read_count': read_count,
+                'last_accessed': last_access.timestamp.strftime("%Y-%m-%d %H:%M:%S") if last_access else None
+            })
+    except Exception as e:
+        logger.error(f"Error getting secrets: {e}")
+    
+    return render_template('secrets.html', 
+                          active_page='secrets',
+                          vault_status=vault_status,
+                          secrets=secrets)
+
+@vault_api.route('/ssh')
+def ssh_page():
+    """SSH certificates page"""
+    vault_status = "Connected" if vault_client() else "Disconnected"
+    
+    # Get SSH roles
+    roles = []
+    client = vault_client()
+    if client:
+        use_mock = os.environ.get('USE_MOCK_VAULT', 'true').lower() == 'true'
+        
+        if use_mock:
+            roles = getattr(client, 'roles', {}).get('ssh', ['admin-role', 'dev-role'])
+        else:
+            try:
+                response = requests.get(
+                    f"{VAULT_ADDR}/v1/ssh/roles",
+                    headers={"X-Vault-Token": VAULT_TOKEN}
+                )
+                response.raise_for_status()
+                roles = response.json().get('data', {}).get('keys', [])
+            except Exception as e:
+                logger.error(f"Error getting SSH roles: {e}")
+    
+    # Get SSH access logs
+    ssh_logs = []
+    try:
+        logs = AccessLog.query.join(Secret).filter(
+            Secret.type == SecretType.SSH
+        ).order_by(AccessLog.timestamp.desc()).limit(5).all()
+        
+        for log in logs:
+            secret = Secret.query.get(log.secret_id)
+            if secret:
+                ssh_logs.append({
+                    'id': log.id,
+                    'secret_name': secret.name,
+                    'action': log.action.value,
+                    'timestamp': log.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                    'success': log.success
+                })
+    except Exception as e:
+        logger.error(f"Error getting SSH logs: {e}")
+    
+    return render_template('ssh.html', 
+                          active_page='ssh',
+                          vault_status=vault_status,
+                          ssh_roles=roles,
+                          ssh_logs=ssh_logs)
+
+@vault_api.route('/aws')
+def aws_page():
+    """AWS credentials page"""
+    vault_status = "Connected" if vault_client() else "Disconnected"
+    
+    # Get AWS roles
+    roles = []
+    client = vault_client()
+    if client:
+        use_mock = os.environ.get('USE_MOCK_VAULT', 'true').lower() == 'true'
+        
+        if use_mock:
+            roles = getattr(client, 'roles', {}).get('aws', ['readonly', 'ec2-admin'])
+        else:
+            try:
+                response = requests.get(
+                    f"{VAULT_ADDR}/v1/aws/roles",
+                    headers={"X-Vault-Token": VAULT_TOKEN}
+                )
+                response.raise_for_status()
+                roles = response.json().get('data', {}).get('keys', [])
+            except Exception as e:
+                logger.error(f"Error getting AWS roles: {e}")
+    
+    # Get AWS access logs
+    aws_logs = []
+    try:
+        logs = AccessLog.query.join(Secret).filter(
+            Secret.type == SecretType.AWS
+        ).order_by(AccessLog.timestamp.desc()).limit(5).all()
+        
+        for log in logs:
+            secret = Secret.query.get(log.secret_id)
+            if secret:
+                aws_logs.append({
+                    'id': log.id,
+                    'secret_name': secret.name,
+                    'action': log.action.value,
+                    'timestamp': log.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                    'success': log.success
+                })
+    except Exception as e:
+        logger.error(f"Error getting AWS logs: {e}")
+    
+    return render_template('aws.html', 
+                          active_page='aws',
+                          vault_status=vault_status,
+                          aws_roles=roles,
+                          aws_logs=aws_logs)
+
+@vault_api.route('/roles')
+def roles_page():
+    """Roles and policies page"""
+    vault_status = "Connected" if vault_client() else "Disconnected"
+    
+    # Get roles
+    roles = []
+    try:
+        db_roles = VaultRole.query.all()
+        for role in db_roles:
+            roles.append({
+                'id': role.id,
+                'name': role.name,
+                'description': role.description,
+                'policies': role.policies.split(',') if role.policies else [],
+                'created_at': role.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            })
+    except Exception as e:
+        logger.error(f"Error getting roles: {e}")
+    
+    return render_template('roles.html', 
+                          active_page='roles',
+                          vault_status=vault_status,
+                          roles=roles)
+
+@vault_api.route('/activity')
+def activity_page():
+    """Activity logs page"""
+    vault_status = "Connected" if vault_client() else "Disconnected"
+    
+    # Get logs
+    logs = []
+    try:
+        access_logs = AccessLog.query.order_by(AccessLog.timestamp.desc()).limit(50).all()
+        for log in access_logs:
+            secret = Secret.query.get(log.secret_id)
+            logs.append({
+                'id': log.id,
+                'secret_name': secret.name if secret else f"Unknown ({log.secret_id})",
+                'secret_type': secret.type.value if secret else "unknown",
+                'action': log.action.value,
+                'timestamp': log.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                'client_ip': log.client_ip,
+                'success': log.success
+            })
+    except Exception as e:
+        logger.error(f"Error getting logs: {e}")
+    
+    return render_template('activity.html', 
+                          active_page='activity',
+                          vault_status=vault_status,
+                          logs=logs)
+
+@vault_api.route('/settings')
+def settings_page():
+    """Settings page"""
+    vault_status = "Connected" if vault_client() else "Disconnected"
+    vault_addr = os.environ.get('VAULT_ADDR', 'http://127.0.0.1:8200')
+    use_mock = os.environ.get('USE_MOCK_VAULT', 'true').lower() == 'true'
+    
+    return render_template('settings.html', 
+                          active_page='settings',
+                          vault_status=vault_status,
+                          vault_addr=vault_addr,
+                          use_mock=use_mock)

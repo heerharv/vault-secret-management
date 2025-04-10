@@ -1,0 +1,687 @@
+{% extends "layout.html" %}
+
+{% block title %}Activity Logs - Vault Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">Activity Logs</h1>
+            <p class="text-muted fs-6">Track all secret access and operations</p>
+        </div>
+        <div>
+            <button id="refreshLogs" class="btn btn-primary">
+                <i class="fas fa-sync-alt me-2"></i> Refresh
+            </button>
+        </div>
+    </div>
+    
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label for="secretTypeFilter" class="form-label">Secret Type</label>
+                    <select id="secretTypeFilter" class="form-select">
+                        <option value="all" selected>All Types</option>
+                        <option value="database">Database</option>
+                        <option value="api">API</option>
+                        <option value="aws">AWS</option>
+                        <option value="ssh">SSH</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="actionFilter" class="form-label">Action</label>
+                    <select id="actionFilter" class="form-select">
+                        <option value="all" selected>All Actions</option>
+                        <option value="create">Create</option>
+                        <option value="read">Read</option>
+                        <option value="update">Update</option>
+                        <option value="delete">Delete</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="statusFilter" class="form-label">Status</label>
+                    <select id="statusFilter" class="form-select">
+                        <option value="all" selected>All Status</option>
+                        <option value="success">Success</option>
+                        <option value="failed">Failed</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="searchFilter" class="form-label">Search</label>
+                    <input type="text" id="searchFilter" class="form-control" placeholder="Search logs...">
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <div class="row g-3">
+                        <div class="col">
+                            <label for="dateFromFilter" class="form-label">Date From</label>
+                            <input type="date" id="dateFromFilter" class="form-control">
+                        </div>
+                        <div class="col">
+                            <label for="dateToFilter" class="form-label">Date To</label>
+                            <input type="date" id="dateToFilter" class="form-control">
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 d-flex align-items-end">
+                    <button id="applyFilters" class="btn btn-primary me-2">
+                        <i class="fas fa-filter me-2"></i> Apply Filters
+                    </button>
+                    <button id="resetFilters" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-2"></i> Reset
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Activity Log Table -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Access Logs</h5>
+            <div>
+                <button id="exportCSV" class="btn btn-sm btn-outline-secondary me-2">
+                    <i class="fas fa-file-csv me-1"></i> Export CSV
+                </button>
+                <span class="badge bg-primary" id="logsCount">{{ logs|length if logs is defined else 0 }}</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="logsTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Secret</th>
+                            <th>Type</th>
+                            <th>Action</th>
+                            <th>Timestamp</th>
+                            <th>Client IP</th>
+                            <th>Status</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if logs %}
+                            {% for log in logs %}
+                            <tr>
+                                <td>{{ log.id }}</td>
+                                <td>{{ log.secret_name }}</td>
+                                <td>
+                                    <span class="badge {% if log.secret_type == 'database' %}bg-primary{% elif log.secret_type == 'api' %}bg-success{% elif log.secret_type == 'aws' %}bg-warning{% elif log.secret_type == 'ssh' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                        {{ log.secret_type }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge {% if log.action == 'create' %}bg-info{% elif log.action == 'read' %}bg-primary{% elif log.action == 'update' %}bg-warning{% elif log.action == 'delete' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                        {{ log.action }}
+                                    </span>
+                                </td>
+                                <td>{{ log.timestamp }}</td>
+                                <td>{{ log.client_ip }}</td>
+                                <td>
+                                    <span class="badge {% if log.success %}bg-success{% else %}bg-danger{% endif %}">
+                                        {{ 'Success' if log.success else 'Failed' }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary view-log" data-log-id="{{ log.id }}">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" class="text-center py-3">No access logs recorded yet.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer bg-light">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="text-muted">Showing <span id="displayedLogsCount">{{ logs|length if logs is defined else 0 }}</span> logs</span>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-secondary" id="prevPage" disabled>
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" id="nextPage">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Log Details Modal -->
+    <div class="modal fade" id="logDetailsModal" tabindex="-1" aria-labelledby="logDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="logDetailsModalLabel">Log Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="logDetails">
+                        <div class="d-flex align-items-center justify-content-center" style="height: 200px;">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Analytics Section -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Access by Secret Type</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="secretTypeChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Activity Over Time</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="activityTimelineChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize variables
+        let currentPage = 1;
+        const itemsPerPage = 20;
+        let allLogs = [];
+        let filteredLogs = [];
+        
+        // Initialize modals
+        const logDetailsModal = new bootstrap.Modal(document.getElementById('logDetailsModal'));
+        
+        // Initialize date pickers with default values
+        const today = new Date();
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+        
+        document.getElementById('dateToFilter').valueAsDate = today;
+        document.getElementById('dateFromFilter').valueAsDate = oneMonthAgo;
+        
+        // Load logs on page load
+        loadLogs();
+        
+        // Event listeners
+        document.getElementById('refreshLogs').addEventListener('click', function() {
+            loadLogs();
+        });
+        
+        document.getElementById('applyFilters').addEventListener('click', function() {
+            applyFilters();
+        });
+        
+        document.getElementById('resetFilters').addEventListener('click', function() {
+            resetFilters();
+        });
+        
+        document.getElementById('exportCSV').addEventListener('click', function() {
+            exportToCSV();
+        });
+        
+        document.getElementById('prevPage').addEventListener('click', function() {
+            if (currentPage > 1) {
+                currentPage--;
+                displayLogs();
+            }
+        });
+        
+        document.getElementById('nextPage').addEventListener('click', function() {
+            if (currentPage * itemsPerPage < filteredLogs.length) {
+                currentPage++;
+                displayLogs();
+            }
+        });
+        
+        // Function to load logs from API
+        async function loadLogs() {
+            try {
+                window.showLoading();
+                const result = await fetchAPI('database/access-logs');
+                window.hideLoading();
+                
+                if (result.status === 'ok') {
+                    allLogs = result.logs || [];
+                    filteredLogs = [...allLogs];
+                    
+                    // Update counts
+                    document.getElementById('logsCount').textContent = allLogs.length;
+                    document.getElementById('displayedLogsCount').textContent = Math.min(itemsPerPage, filteredLogs.length);
+                    
+                    // Display logs
+                    displayLogs();
+                    
+                    // Initialize charts
+                    initCharts(allLogs);
+                    
+                    // Add event listeners to view log buttons
+                    document.querySelectorAll('.view-log').forEach(function(button) {
+                        button.addEventListener('click', function() {
+                            const logId = this.getAttribute('data-log-id');
+                            viewLogDetails(logId);
+                        });
+                    });
+                    
+                    window.showToast('Logs loaded successfully', 'success');
+                } else {
+                    window.showToast('Error loading logs: ' + result.message, 'error');
+                }
+            } catch (error) {
+                window.hideLoading();
+                console.error('Error loading logs:', error);
+                window.showToast('Error loading logs: ' + error.message, 'error');
+            }
+        }
+        
+        // Function to display logs with pagination
+        function displayLogs() {
+            const tableBody = document.querySelector('#logsTable tbody');
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = Math.min(startIndex + itemsPerPage, filteredLogs.length);
+            const displayedLogs = filteredLogs.slice(startIndex, endIndex);
+            
+            // Update pagination buttons
+            document.getElementById('prevPage').disabled = currentPage === 1;
+            document.getElementById('nextPage').disabled = endIndex >= filteredLogs.length;
+            
+            // Update displayed count
+            document.getElementById('displayedLogsCount').textContent = displayedLogs.length;
+            
+            if (displayedLogs.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="8" class="text-center py-3">No logs match your filters.</td></tr>`;
+                return;
+            }
+            
+            // Generate table rows
+            let html = '';
+            displayedLogs.forEach(function(log) {
+                html += `
+                    <tr>
+                        <td>${log.id}</td>
+                        <td>${log.secret_name}</td>
+                        <td>
+                            <span class="badge ${getSecretTypeBadge(log.secret_type)}">
+                                ${log.secret_type}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge ${getActionBadge(log.action)}">
+                                ${log.action}
+                            </span>
+                        </td>
+                        <td>${log.timestamp}</td>
+                        <td>${log.client_ip}</td>
+                        <td>
+                            <span class="badge ${log.success ? 'bg-success' : 'bg-danger'}">
+                                ${log.success ? 'Success' : 'Failed'}
+                            </span>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary view-log" data-log-id="${log.id}">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tableBody.innerHTML = html;
+            
+            // Add event listeners to view log buttons
+            document.querySelectorAll('.view-log').forEach(function(button) {
+                button.addEventListener('click', function() {
+                    const logId = this.getAttribute('data-log-id');
+                    viewLogDetails(logId);
+                });
+            });
+        }
+        
+        // Function to apply filters
+        function applyFilters() {
+            const secretType = document.getElementById('secretTypeFilter').value;
+            const action = document.getElementById('actionFilter').value;
+            const status = document.getElementById('statusFilter').value;
+            const search = document.getElementById('searchFilter').value.toLowerCase();
+            const dateFrom = document.getElementById('dateFromFilter').valueAsDate;
+            const dateTo = document.getElementById('dateToFilter').valueAsDate;
+            
+            // Add one day to dateTo to include the selected date
+            if (dateTo) {
+                dateTo.setDate(dateTo.getDate() + 1);
+            }
+            
+            filteredLogs = allLogs.filter(function(log) {
+                // Secret type filter
+                if (secretType !== 'all' && log.secret_type !== secretType) {
+                    return false;
+                }
+                
+                // Action filter
+                if (action !== 'all' && log.action !== action) {
+                    return false;
+                }
+                
+                // Status filter
+                if (status !== 'all') {
+                    if (status === 'success' && !log.success) {
+                        return false;
+                    }
+                    if (status === 'failed' && log.success) {
+                        return false;
+                    }
+                }
+                
+                // Search filter
+                if (search && !log.secret_name.toLowerCase().includes(search) && 
+                    !log.client_ip.toLowerCase().includes(search)) {
+                    return false;
+                }
+                
+                // Date filter
+                if (dateFrom || dateTo) {
+                    const logDate = new Date(log.timestamp);
+                    
+                    if (dateFrom && logDate < dateFrom) {
+                        return false;
+                    }
+                    
+                    if (dateTo && logDate > dateTo) {
+                        return false;
+                    }
+                }
+                
+                return true;
+            });
+            
+            // Reset to first page
+            currentPage = 1;
+            
+            // Display filtered logs
+            displayLogs();
+            
+            // Update charts
+            initCharts(filteredLogs);
+            
+            window.showToast(`Showing ${filteredLogs.length} logs that match your filters`, 'info');
+        }
+        
+        // Function to reset filters
+        function resetFilters() {
+            document.getElementById('secretTypeFilter').value = 'all';
+            document.getElementById('actionFilter').value = 'all';
+            document.getElementById('statusFilter').value = 'all';
+            document.getElementById('searchFilter').value = '';
+            
+            const today = new Date();
+            const oneMonthAgo = new Date();
+            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+            
+            document.getElementById('dateToFilter').valueAsDate = today;
+            document.getElementById('dateFromFilter').valueAsDate = oneMonthAgo;
+            
+            // Reset filtered logs
+            filteredLogs = [...allLogs];
+            currentPage = 1;
+            
+            // Display all logs
+            displayLogs();
+            
+            // Update charts
+            initCharts(allLogs);
+            
+            window.showToast('Filters reset', 'info');
+        }
+        
+        // Function to export to CSV
+        function exportToCSV() {
+            if (filteredLogs.length === 0) {
+                window.showToast('No logs to export', 'warning');
+                return;
+            }
+            
+            const headers = ['ID', 'Secret', 'Type', 'Action', 'Timestamp', 'Client IP', 'Status'];
+            const csvContent = [
+                headers.join(','),
+                ...filteredLogs.map(log => [
+                    log.id,
+                    `"${log.secret_name.replace(/"/g, '""')}"`,
+                    log.secret_type,
+                    log.action,
+                    log.timestamp,
+                    log.client_ip,
+                    log.success ? 'Success' : 'Failed'
+                ].join(','))
+            ].join('\n');
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `vault_access_logs_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.display = 'none';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            window.showToast('Logs exported to CSV', 'success');
+        }
+        
+        // Function to view log details
+        function viewLogDetails(logId) {
+            const log = allLogs.find(log => log.id == logId);
+            
+            if (!log) {
+                window.showToast('Log not found', 'error');
+                return;
+            }
+            
+            const logDetails = document.getElementById('logDetails');
+            
+            // Format timestamp
+            const timestamp = new Date(log.timestamp);
+            const formattedDate = timestamp.toLocaleDateString();
+            const formattedTime = timestamp.toLocaleTimeString();
+            
+            // Build HTML
+            let html = `
+                <div class="mb-4">
+                    <h6 class="text-muted mb-3">Log Information</h6>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="fw-medium">ID:</span>
+                        <span>${log.id}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="fw-medium">Secret:</span>
+                        <span>${log.secret_name}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="fw-medium">Type:</span>
+                        <span class="badge ${getSecretTypeBadge(log.secret_type)}">${log.secret_type}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="fw-medium">Action:</span>
+                        <span class="badge ${getActionBadge(log.action)}">${log.action}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="fw-medium">Date:</span>
+                        <span>${formattedDate}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="fw-medium">Time:</span>
+                        <span>${formattedTime}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="fw-medium">Client IP:</span>
+                        <span>${log.client_ip}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="fw-medium">Status:</span>
+                        <span class="badge ${log.success ? 'bg-success' : 'bg-danger'}">
+                            ${log.success ? 'Success' : 'Failed'}
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="alert ${log.success ? 'alert-success' : 'alert-danger'} mb-0">
+                    <i class="fas ${log.success ? 'fa-check-circle' : 'fa-exclamation-circle'} me-2"></i>
+                    ${log.success 
+                        ? `Secret was successfully ${log.action}ed`
+                        : `Failed to ${log.action} secret`}
+                </div>
+            `;
+            
+            logDetails.innerHTML = html;
+            logDetailsModal.show();
+        }
+        
+        // Function to initialize charts
+        function initCharts(logs) {
+            // Prepare data for secret type chart
+            const secretTypeCounts = {};
+            logs.forEach(function(log) {
+                const type = log.secret_type || 'unknown';
+                secretTypeCounts[type] = (secretTypeCounts[type] || 0) + 1;
+            });
+            
+            const secretTypeLabels = Object.keys(secretTypeCounts);
+            const secretTypeData = Object.values(secretTypeCounts);
+            const secretTypeColors = secretTypeLabels.map(type => {
+                if (type === 'database') return '#0d6efd';
+                if (type === 'api') return '#198754';
+                if (type === 'aws') return '#ffc107';
+                if (type === 'ssh') return '#dc3545';
+                return '#6c757d';
+            });
+            
+            // Create secret type chart
+            const secretTypeCtx = document.getElementById('secretTypeChart').getContext('2d');
+            if (window.secretTypeChart) {
+                window.secretTypeChart.destroy();
+            }
+            window.secretTypeChart = new Chart(secretTypeCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: secretTypeLabels,
+                    datasets: [{
+                        data: secretTypeData,
+                        backgroundColor: secretTypeColors,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+            
+            // Prepare data for activity timeline chart
+            const timelineData = {};
+            
+            logs.forEach(function(log) {
+                const date = log.timestamp.split(' ')[0];
+                timelineData[date] = (timelineData[date] || 0) + 1;
+            });
+            
+            // Sort dates
+            const sortedDates = Object.keys(timelineData).sort();
+            const activityData = sortedDates.map(date => timelineData[date]);
+            
+            // Create activity timeline chart
+            const timelineCtx = document.getElementById('activityTimelineChart').getContext('2d');
+            if (window.timelineChart) {
+                window.timelineChart.destroy();
+            }
+            window.timelineChart = new Chart(timelineCtx, {
+                type: 'line',
+                data: {
+                    labels: sortedDates,
+                    datasets: [{
+                        label: 'Activity Count',
+                        data: activityData,
+                        borderColor: '#0d6efd',
+                        backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Helper functions
+        function getSecretTypeBadge(type) {
+            switch (type) {
+                case 'database': return 'bg-primary';
+                case 'api': return 'bg-success';
+                case 'aws': return 'bg-warning';
+                case 'ssh': return 'bg-danger';
+                default: return 'bg-secondary';
+            }
+        }
+        
+        function getActionBadge(action) {
+            switch (action) {
+                case 'create': return 'bg-info';
+                case 'read': return 'bg-primary';
+                case 'update': return 'bg-warning';
+                case 'delete': return 'bg-danger';
+                default: return 'bg-secondary';
+            }
+        }
+    });
+</script>
+{% endblock %}

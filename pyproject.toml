@@ -9,4 +9,8 @@ dependencies = [
     "hvac>=2.3.0",
     "psycopg2-binary>=2.9.10",
     "requests>=2.32.3",
+    "pyjwt>=2.10.1",
+    "python-dotenv>=1.1.0",
+    "flask-wtf>=1.2.2",
+    "flask-migrate>=4.1.0",
 ]

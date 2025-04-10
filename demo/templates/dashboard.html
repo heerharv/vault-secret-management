@@ -1,0 +1,490 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard - Vault Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">Dashboard</h1>
+            <p class="text-muted fs-6">Overview of your secrets management system</p>
+        </div>
+        <div>
+            <button id="refreshStatus" class="btn btn-primary">
+                <i class="fas fa-sync-alt me-2"></i> Refresh
+            </button>
+        </div>
+    </div>
+    
+    <!-- Status Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stats-card">
+                <div class="stats-icon">
+                    <i class="fas fa-key"></i>
+                </div>
+                <div class="stats-info">
+                    <h3>{{ total_secrets if total_secrets is defined else 0 }}</h3>
+                    <p>Total Secrets</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card">
+                <div class="stats-icon" style="background-color: rgba(46, 204, 113, 0.1); color: #2ecc71;">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <div class="stats-info">
+                    <h3>{{ total_roles if total_roles is defined else 0 }}</h3>
+                    <p>Vault Roles</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card">
+                <div class="stats-icon" style="background-color: rgba(52, 152, 219, 0.1); color: #3498db;">
+                    <i class="fas fa-terminal"></i>
+                </div>
+                <div class="stats-info">
+                    <h3>{{ ssh_certs_issued if ssh_certs_issued is defined else 0 }}</h3>
+                    <p>SSH Certs Issued</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card">
+                <div class="stats-icon" style="background-color: rgba(243, 156, 18, 0.1); color: #f39c12;">
+                    <i class="fas fa-user-clock"></i>
+                </div>
+                <div class="stats-info">
+                    <h3>{{ access_logs_count if access_logs_count is defined else 0 }}</h3>
+                    <p>Access Logs</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Vault Status -->
+    <div class="row mb-4">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Vault Status</h5>
+                    <span id="vaultStatusBadge" class="badge {% if vault_status == 'Connected' %}bg-success{% else %}bg-danger{% endif %}">
+                        {{ vault_status }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div id="vaultStatusDetails">
+                        <div class="d-flex justify-content-between mb-3">
+                            <div class="text-muted">Server Address:</div>
+                            <div class="fw-medium">{{ vault_addr }}</div>
+                        </div>
+                        <div class="d-flex justify-content-between mb-3">
+                            <div class="text-muted">Initialization Status:</div>
+                            <div class="fw-medium" id="vault-initialized">Loading...</div>
+                        </div>
+                        <div class="d-flex justify-content-between mb-3">
+                            <div class="text-muted">Seal Status:</div>
+                            <div class="fw-medium" id="vault-sealed">Loading...</div>
+                        </div>
+                        <div class="d-flex justify-content-between mb-3">
+                            <div class="text-muted">Version:</div>
+                            <div class="fw-medium" id="vault-version">Loading...</div>
+                        </div>
+                        <div class="d-flex justify-content-between mb-3">
+                            <div class="text-muted">Cluster Name:</div>
+                            <div class="fw-medium" id="vault-cluster">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Last Updated: <span id="statusLastUpdated">Never</span></small>
+                        <a href="{{ url_for('vault_api.settings_page') }}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-cog me-1"></i> Configure
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Authentication Methods</h5>
+                </div>
+                <div class="card-body">
+                    <div id="authMethods">
+                        <div class="d-flex align-items-center justify-content-center" style="height: 200px;">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <button id="authMethodsDemo" class="btn btn-sm btn-primary">
+                        <i class="fas fa-sync-alt me-1"></i> Refresh Auth Methods
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Activity and Secrets -->
+    <div class="row">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Recent Activity</h5>
+                    <a href="{{ url_for('vault_api.activity_page') }}" class="btn btn-sm btn-outline-primary">View All</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Secret</th>
+                                    <th>Action</th>
+                                    <th>Time</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if recent_logs %}
+                                    {% for log in recent_logs %}
+                                    <tr>
+                                        <td>{{ log.secret_name }}</td>
+                                        <td>{{ log.action }}</td>
+                                        <td>{{ log.timestamp }}</td>
+                                        <td>
+                                            {% if log.success %}
+                                            <span class="badge bg-success">Success</span>
+                                            {% else %}
+                                            <span class="badge bg-danger">Failed</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="4" class="text-center py-3">No activity logs recorded yet.</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Secrets Overview</h5>
+                    <a href="{{ url_for('vault_api.secrets_page') }}" class="btn btn-sm btn-outline-primary">Manage Secrets</a>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for secret_type, count in secret_counts.items() %}
+                        <div class="col-6 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center py-3">
+                                    <div class="d-flex justify-content-center align-items-center mb-2">
+                                        {% if secret_type == 'database' %}
+                                            <i class="fas fa-database text-primary fs-4"></i>
+                                        {% elif secret_type == 'api' %}
+                                            <i class="fas fa-plug text-success fs-4"></i>
+                                        {% elif secret_type == 'aws' %}
+                                            <i class="fab fa-aws text-warning fs-4"></i>
+                                        {% elif secret_type == 'ssh' %}
+                                            <i class="fas fa-terminal text-danger fs-4"></i>
+                                        {% else %}
+                                            <i class="fas fa-key text-secondary fs-4"></i>
+                                        {% endif %}
+                                    </div>
+                                    <h3 class="h4">{{ count }}</h3>
+                                    <p class="text-muted mb-0 text-capitalize">{{ secret_type }} Secrets</p>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="card-footer bg-light d-flex justify-content-between align-items-center">
+                    <button id="fetchDbSecrets" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-database me-1"></i> DB Secrets
+                    </button>
+                    <button id="fetchApiSecrets" class="btn btn-sm btn-outline-success">
+                        <i class="fas fa-plug me-1"></i> API Secrets
+                    </button>
+                    <button id="clearCache" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-trash me-1"></i> Clear Cache
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Secrets Modals -->
+    <div class="modal fade" id="dbSecretsModal" tabindex="-1" aria-labelledby="dbSecretsModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="dbSecretsModalLabel">Database Credentials</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="dbSecrets">
+                        <p class="text-center text-muted">Loading database credentials...</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal fade" id="apiSecretsModal" tabindex="-1" aria-labelledby="apiSecretsModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="apiSecretsModalLabel">API Keys</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="apiSecrets">
+                        <p class="text-center text-muted">Loading API keys...</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const statusLastUpdated = document.getElementById('statusLastUpdated');
+        const vaultStatusBadge = document.getElementById('vaultStatusBadge');
+        
+        // Initialize modals
+        const dbSecretsModal = new bootstrap.Modal(document.getElementById('dbSecretsModal'));
+        const apiSecretsModal = new bootstrap.Modal(document.getElementById('apiSecretsModal'));
+        
+        // Refresh status function
+        async function refreshStatus() {
+            try {
+                const result = await fetchAPI('status');
+                if (result.status === 'ok') {
+                    const status = result.vault_status;
+                    document.getElementById('vault-initialized').textContent = status.initialized ? 'Yes' : 'No';
+                    document.getElementById('vault-sealed').textContent = status.sealed ? 'Sealed' : 'Unsealed';
+                    document.getElementById('vault-version').textContent = status.version;
+                    document.getElementById('vault-cluster').textContent = status.cluster_name;
+                    
+                    statusLastUpdated.textContent = new Date().toLocaleTimeString();
+                    vaultStatusBadge.textContent = 'Connected';
+                    vaultStatusBadge.classList.remove('bg-danger');
+                    vaultStatusBadge.classList.add('bg-success');
+                    
+                    // Show a toast notification
+                    window.showToast('Vault status refreshed successfully', 'success');
+                } else {
+                    vaultStatusBadge.textContent = 'Disconnected';
+                    vaultStatusBadge.classList.remove('bg-success');
+                    vaultStatusBadge.classList.add('bg-danger');
+                    window.showToast('Error refreshing Vault status: ' + result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error refreshing status:', error);
+                window.showToast('Error refreshing Vault status: ' + error.message, 'error');
+            }
+        }
+        
+        // Load authentication methods
+        async function loadAuthMethods() {
+            try {
+                const authInfo = await fetchAPI('auth/methods');
+                if (authInfo.status === 'ok') {
+                    let html = `
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Path</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
+                    
+                    const methods = Object.entries(authInfo.auth_methods).map(([path, details]) => {
+                        return `<tr>
+                            <td>${path}</td>
+                            <td>
+                                <span class="badge bg-primary">${details.type}</span>
+                            </td>
+                            <td>${details.description || 'No description'}</td>
+                        </tr>`;
+                    }).join('');
+                    
+                    if (methods.length === 0) {
+                        html = `<div class="alert alert-info mb-0">No authentication methods configured.</div>`;
+                    } else {
+                        html += methods + '</tbody></table></div>';
+                    }
+                    
+                    document.getElementById('authMethods').innerHTML = html;
+                } else {
+                    document.getElementById('authMethods').innerHTML = `
+                        <div class="alert alert-danger">
+                            <h6>Error</h6>
+                            <p>${authInfo.message}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading auth methods:', error);
+                document.getElementById('authMethods').innerHTML = `
+                    <div class="alert alert-danger">
+                        <h6>Error</h6>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // Load database secrets
+        async function loadDbSecrets() {
+            try {
+                const result = await fetchAPI('secrets/db');
+                if (result.status === 'ok') {
+                    const data = result.data;
+                    let html = `
+                        <div class="secret-details">
+                            <div class="mb-3">
+                                <label class="form-label">Username</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" value="${data.username}" readonly>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="copyToClipboard('${data.username}')">
+                                        <i class="fas fa-copy"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Password</label>
+                                <div class="input-group">
+                                    <input type="password" id="db-password" class="form-control" value="********" readonly>
+                                    <button class="btn btn-outline-secondary toggle-secret" type="button" data-target="db-password">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted">Retrieved at: ${data.retrieved_at}</small>
+                                <small class="text-muted">Source: ${result.source}</small>
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('dbSecrets').innerHTML = html;
+                    dbSecretsModal.show();
+                } else {
+                    window.showToast('Error retrieving database secrets: ' + result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error loading database secrets:', error);
+                window.showToast('Error retrieving database secrets: ' + error.message, 'error');
+            }
+        }
+        
+        // Load API secrets
+        async function loadApiSecrets() {
+            try {
+                const result = await fetchAPI('secrets/api');
+                if (result.status === 'ok') {
+                    const data = result.data;
+                    let html = `
+                        <div class="secret-details">
+                            <div class="mb-3">
+                                <label class="form-label">API Key</label>
+                                <div class="input-group">
+                                    <input type="password" id="api-key" class="form-control" value="${data.api_key}" readonly>
+                                    <button class="btn btn-outline-secondary toggle-secret" type="button" data-target="api-key">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="copyToClipboard('${data.api_key}')">
+                                        <i class="fas fa-copy"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted">Retrieved at: ${data.retrieved_at}</small>
+                                <small class="text-muted">Source: ${result.source}</small>
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('apiSecrets').innerHTML = html;
+                    apiSecretsModal.show();
+                } else {
+                    window.showToast('Error retrieving API secrets: ' + result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error loading API secrets:', error);
+                window.showToast('Error retrieving API secrets: ' + error.message, 'error');
+            }
+        }
+        
+        // Clear cache
+        async function clearCache() {
+            try {
+                const result = await fetchAPI('clear-cache');
+                if (result.status === 'ok') {
+                    window.showToast('Secret cache cleared successfully', 'success');
+                } else {
+                    window.showToast('Error clearing cache: ' + result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error clearing cache:', error);
+                window.showToast('Error clearing cache: ' + error.message, 'error');
+            }
+        }
+        
+        // Event listeners
+        document.getElementById('refreshStatus').addEventListener('click', refreshStatus);
+        document.getElementById('authMethodsDemo').addEventListener('click', loadAuthMethods);
+        document.getElementById('fetchDbSecrets').addEventListener('click', loadDbSecrets);
+        document.getElementById('fetchApiSecrets').addEventListener('click', loadApiSecrets);
+        document.getElementById('clearCache').addEventListener('click', clearCache);
+        
+        // Initialize the page
+        refreshStatus();
+        loadAuthMethods();
+        
+        // Toggle secret visibility after modal is shown
+        document.querySelectorAll('.toggle-secret').forEach(function(button) {
+            button.addEventListener('click', function() {
+                const secretValueField = document.getElementById(this.dataset.target);
+                const icon = this.querySelector('i');
+                if (secretValueField.type === 'password') {
+                    secretValueField.type = 'text';
+                    icon.classList.remove('fa-eye');
+                    icon.classList.add('fa-eye-slash');
+                } else {
+                    secretValueField.type = 'password';
+                    icon.classList.remove('fa-eye-slash');
+                    icon.classList.add('fa-eye');
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}

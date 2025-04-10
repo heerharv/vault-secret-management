@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Vault Manager - Secure Secrets Management{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom CSS -->
+    <style>
+        :root {
+            --primary-color: #1563ff;
+            --secondary-color: #6c757d;
+            --sidebar-bg: #f8f9fa;
+            --success-color: #2ecc71;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --light-bg: #f5f7fb;
+            --border-radius: 0.5rem;
+            --box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--light-bg);
+            color: #333;
+        }
+        
+        .layout-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        .sidebar {
+            width: 280px;
+            background-color: var(--sidebar-bg);
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            transition: all 0.3s;
+            padding: 1.5rem 0;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        
+        .sidebar-collapsed {
+            width: 70px;
+        }
+        
+        .main-content {
+            flex: 1;
+            margin-left: 280px;
+            padding: 2rem;
+            transition: all 0.3s;
+        }
+        
+        .main-content-expanded {
+            margin-left: 70px;
+        }
+        
+        .sidebar-logo {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 1.5rem 1.5rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .sidebar-logo h4 {
+            margin: 0;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        
+        .sidebar-toggle {
+            border: none;
+            background: transparent;
+            color: #6c757d;
+            cursor: pointer;
+        }
+        
+        .nav-item {
+            margin-bottom: 0.25rem;
+        }
+        
+        .nav-link {
+            color: #495057;
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
+            border-radius: 0;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s;
+        }
+        
+        .nav-link i {
+            margin-right: 1rem;
+            font-size: 1.1rem;
+            width: 1.5rem;
+            text-align: center;
+        }
+        
+        .nav-link:hover, .nav-link.active {
+            color: var(--primary-color);
+            background-color: rgba(21, 99, 255, 0.1);
+        }
+        
+        .sidebar-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid #e9ecef;
+            margin-top: auto;
+        }
+        
+        .sidebar-collapsed .sidebar-logo span,
+        .sidebar-collapsed .nav-link span,
+        .sidebar-collapsed .sidebar-footer span {
+            display: none;
+        }
+        
+        .card {
+            border: none;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+        }
+        
+        .card-header {
+            background-color: #fff;
+            border-bottom: 1px solid #e9ecef;
+            padding: 1rem 1.25rem;
+            font-weight: 600;
+        }
+        
+        .card-body {
+            padding: 1.25rem;
+        }
+        
+        .btn {
+            border-radius: 0.4rem;
+            font-weight: 500;
+            padding: 0.5rem 1.25rem;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .btn-primary:hover {
+            background-color: #0051ea;
+            border-color: #0051ea;
+        }
+        
+        .table th {
+            font-weight: 600;
+            color: #495057;
+            border-top: none;
+            background-color: #f8f9fa;
+        }
+        
+        .badge {
+            font-weight: 500;
+            padding: 0.4rem 0.7rem;
+            border-radius: 30px;
+        }
+        
+        .badge-primary {
+            background-color: var(--primary-color);
+        }
+        
+        .badge-success {
+            background-color: var(--success-color);
+        }
+        
+        .badge-warning {
+            background-color: var(--warning-color);
+        }
+        
+        .badge-danger {
+            background-color: var(--danger-color);
+        }
+        
+        .alert {
+            border-radius: var(--border-radius);
+            border: none;
+        }
+        
+        .form-control {
+            border-radius: 0.4rem;
+            padding: 0.6rem 1rem;
+            border: 1px solid #ced4da;
+        }
+        
+        .form-control:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.2rem rgba(21, 99, 255, 0.25);
+        }
+        
+        /* Dashboard stats */
+        .stats-card {
+            display: flex;
+            align-items: center;
+            padding: 1.5rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            margin-bottom: 1.5rem;
+            background-color: #fff;
+        }
+        
+        .stats-icon {
+            width: 4rem;
+            height: 4rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            margin-right: 1rem;
+            background-color: rgba(21, 99, 255, 0.1);
+            color: var(--primary-color);
+            font-size: 1.5rem;
+        }
+        
+        .stats-info h3 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+        
+        .stats-info p {
+            margin-bottom: 0;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        
+        /* Status indicators */
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        
+        .status-active {
+            background-color: var(--success-color);
+        }
+        
+        .status-inactive {
+            background-color: var(--danger-color);
+        }
+        
+        .status-warning {
+            background-color: var(--warning-color);
+        }
+        
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1060;
+        }
+        
+        .custom-toast {
+            min-width: 300px;
+            background-color: #fff;
+            border-radius: var(--border-radius);
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .custom-toast.show {
+            opacity: 1;
+        }
+        
+        /* Loading spinner */
+        .spinner-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+        
+        .spinner-overlay.show {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+            border-width: 0.25rem;
+            color: var(--primary-color);
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+        
+        /* Responsive styles */
+        @media (max-width: 992px) {
+            .sidebar {
+                width: 70px;
+            }
+            
+            .sidebar-logo span,
+            .nav-link span,
+            .sidebar-footer span {
+                display: none;
+            }
+            
+            .main-content {
+                margin-left: 70px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 0;
+                padding: 0;
+            }
+            
+            .sidebar.show {
+                width: 280px;
+                padding: 1.5rem 0;
+            }
+            
+            .sidebar.show .sidebar-logo span,
+            .sidebar.show .nav-link span,
+            .sidebar.show .sidebar-footer span {
+                display: inline;
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .mobile-header {
+                display: flex !important;
+            }
+        }
+        
+        .mobile-header {
+            display: none;
+            padding: 1rem;
+            background-color: #fff;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+        }
+        
+        /* Secret details */
+        .secret-details {
+            background-color: #f8f9fa;
+            border-radius: var(--border-radius);
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .secret-value {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            background-color: #f1f3f5;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            position: relative;
+            margin-bottom: 0;
+        }
+        
+        .copy-icon {
+            cursor: pointer;
+            position: absolute;
+            right: 0.5rem;
+            top: 0.5rem;
+        }
+        
+        /* Vault role badges */
+        .role-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            border-radius: 0.25rem;
+            margin-right: 0.25rem;
+            margin-bottom: 0.25rem;
+            background-color: #e9ecef;
+            color: #495057;
+        }
+        
+        /* Timeline */
+        .timeline {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+        
+        .timeline:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 16px;
+            width: 2px;
+            background-color: #e9ecef;
+        }
+        
+        .timeline-item {
+            position: relative;
+            padding-left: 40px;
+            padding-bottom: 1.5rem;
+        }
+        
+        .timeline-icon {
+            position: absolute;
+            left: 0;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--primary-color);
+            color: #fff;
+            z-index: 1;
+        }
+        
+        .timeline-content {
+            padding: 1rem;
+            border-radius: var(--border-radius);
+            background-color: #fff;
+            box-shadow: var(--box-shadow);
+        }
+        
+        .timeline-date {
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+        
+        /* Form inputs with copy buttons */
+        .input-group-append {
+            cursor: pointer;
+        }
+        
+        /* Terminal output */
+        .terminal-output {
+            background-color: #212529;
+            color: #f8f9fa;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            padding: 1rem;
+            border-radius: var(--border-radius);
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .terminal-output .success {
+            color: var(--success-color);
+        }
+        
+        .terminal-output .error {
+            color: var(--danger-color);
+        }
+        
+        .terminal-output .warning {
+            color: var(--warning-color);
+        }
+        
+        /* Secret expiration indicators */
+        .expiration-indicator {
+            display: flex;
+            align-items: center;
+            margin-top: 0.5rem;
+        }
+        
+        .expiration-bar {
+            flex: 1;
+            height: 5px;
+            background-color: #e9ecef;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-right: 0.5rem;
+        }
+        
+        .expiration-progress {
+            height: 100%;
+            border-radius: 3px;
+        }
+        
+        .expiration-active {
+            background-color: var(--success-color);
+        }
+        
+        .expiration-warning {
+            background-color: var(--warning-color);
+        }
+        
+        .expiration-expired {
+            background-color: var(--danger-color);
+        }
+        
+        .expiration-text {
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        
+        /* Policies editor */
+        .policies-editor {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            height: 300px;
+            border-radius: var(--border-radius);
+            padding: 1rem;
+            border: 1px solid #ced4da;
+            overflow-y: auto;
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Loading Spinner -->
+    <div class="spinner-overlay">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+    
+    <!-- Toast Container -->
+    <div class="toast-container"></div>
+    
+    <!-- Mobile Header -->
+    <div class="mobile-header">
+        <button class="btn btn-link mobile-menu-toggle p-0" type="button">
+            <i class="fas fa-bars"></i>
+        </button>
+        <div class="d-flex align-items-center">
+            <h4 class="mb-0 text-primary">Vault Manager</h4>
+        </div>
+    </div>
+    
+    <div class="layout-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-vault me-2 text-primary"></i>
+                    <span>Vault Manager</span>
+                </div>
+                <button class="sidebar-toggle" type="button">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+            </div>
+            
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="{{ url_for('vault_api.index') }}">
+                        <i class="fas fa-tachometer-alt"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if active_page == 'secrets' %}active{% endif %}" href="{{ url_for('vault_api.secrets_page') }}">
+                        <i class="fas fa-key"></i>
+                        <span>Secrets</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if active_page == 'ssh' %}active{% endif %}" href="{{ url_for('vault_api.ssh_page') }}">
+                        <i class="fas fa-terminal"></i>
+                        <span>SSH Certificates</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if active_page == 'aws' %}active{% endif %}" href="{{ url_for('vault_api.aws_page') }}">
+                        <i class="fab fa-aws"></i>
+                        <span>AWS Credentials</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if active_page == 'roles' %}active{% endif %}" href="{{ url_for('vault_api.roles_page') }}">
+                        <i class="fas fa-user-shield"></i>
+                        <span>Roles & Policies</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if active_page == 'activity' %}active{% endif %}" href="{{ url_for('vault_api.activity_page') }}">
+                        <i class="fas fa-history"></i>
+                        <span>Activity Logs</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if active_page == 'settings' %}active{% endif %}" href="{{ url_for('vault_api.settings_page') }}">
+                        <i class="fas fa-cog"></i>
+                        <span>Settings</span>
+                    </a>
+                </li>
+            </ul>
+            
+            <div class="sidebar-footer mt-auto">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="status-indicator me-2 {% if vault_status == 'Connected' %}status-active{% else %}status-inactive{% endif %}"></div>
+                    <span class="fs-6">Vault: {{ vault_status }}</span>
+                </div>
+                <a href="https://github.com/yourusername/vault-manager" target="_blank" class="btn btn-outline-secondary btn-sm w-100">
+                    <i class="fab fa-github me-2"></i>
+                    <span>View on GitHub</span>
+                </a>
+            </div>
+        </aside>
+        
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="container-fluid p-0">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Main JS -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Sidebar toggle functionality
+            const sidebarToggle = document.querySelector('.sidebar-toggle');
+            const mobileMenuToggle = document.querySelector('.mobile-menu-toggle');
+            const sidebar = document.querySelector('.sidebar');
+            const mainContent = document.querySelector('.main-content');
+            
+            function toggleSidebar() {
+                sidebar.classList.toggle('sidebar-collapsed');
+                mainContent.classList.toggle('main-content-expanded');
+            }
+            
+            function toggleMobileSidebar() {
+                sidebar.classList.toggle('show');
+            }
+            
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', toggleSidebar);
+            }
+            
+            if (mobileMenuToggle) {
+                mobileMenuToggle.addEventListener('click', toggleMobileSidebar);
+            }
+            
+            // Toast notification function
+            window.showToast = function(message, type = 'info') {
+                const toastContainer = document.querySelector('.toast-container');
+                
+                const toast = document.createElement('div');
+                toast.className = 'custom-toast';
+                
+                const toastHeader = document.createElement('div');
+                toastHeader.className = 'toast-header';
+                
+                let icon = 'info-circle';
+                let bgColor = 'primary';
+                
+                if (type === 'success') {
+                    icon = 'check-circle';
+                    bgColor = 'success';
+                } else if (type === 'error') {
+                    icon = 'exclamation-circle';
+                    bgColor = 'danger';
+                } else if (type === 'warning') {
+                    icon = 'exclamation-triangle';
+                    bgColor = 'warning';
+                }
+                
+                toastHeader.innerHTML = `
+                    <div class="rounded me-2 bg-${bgColor} p-1 text-white">
+                        <i class="fas fa-${icon}"></i>
+                    </div>
+                    <strong class="me-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong>
+                    <small>just now</small>
+                    <button type="button" class="btn-close" aria-label="Close"></button>
+                `;
+                
+                const toastBody = document.createElement('div');
+                toastBody.className = 'toast-body';
+                toastBody.textContent = message;
+                
+                toast.appendChild(toastHeader);
+                toast.appendChild(toastBody);
+                
+                toastContainer.appendChild(toast);
+                
+                // Close button functionality
+                const closeButton = toast.querySelector('.btn-close');
+                closeButton.addEventListener('click', function() {
+                    toast.classList.remove('show');
+                    setTimeout(function() {
+                        toast.remove();
+                    }, 300);
+                });
+                
+                // Show toast
+                setTimeout(function() {
+                    toast.classList.add('show');
+                }, 100);
+                
+                // Auto hide after 5 seconds
+                setTimeout(function() {
+                    if (toast.parentNode) {
+                        toast.classList.remove('show');
+                        setTimeout(function() {
+                            if (toast.parentNode) {
+                                toast.remove();
+                            }
+                        }, 300);
+                    }
+                }, 5000);
+            };
+            
+            // Loading overlay function
+            window.showLoading = function() {
+                const spinner = document.querySelector('.spinner-overlay');
+                spinner.classList.add('show');
+            };
+            
+            window.hideLoading = function() {
+                const spinner = document.querySelector('.spinner-overlay');
+                spinner.classList.remove('show');
+            };
+            
+            // Copy to clipboard function
+            window.copyToClipboard = function(text) {
+                navigator.clipboard.writeText(text).then(function() {
+                    showToast('Copied to clipboard!', 'success');
+                }).catch(function(err) {
+                    showToast('Failed to copy text: ' + err, 'error');
+                });
+            };
+            
+            // Add copy to clipboard functionality to all elements with copy-icon class
+            document.querySelectorAll('.copy-icon').forEach(function(icon) {
+                icon.addEventListener('click', function() {
+                    const textElement = this.parentNode.querySelector('code, pre, .secret-value');
+                    if (textElement) {
+                        copyToClipboard(textElement.textContent);
+                    }
+                });
+            });
+            
+            // Secret value toggle
+            document.querySelectorAll('.toggle-secret').forEach(function(button) {
+                button.addEventListener('click', function() {
+                    const secretValueField = document.getElementById(this.dataset.target);
+                    const icon = this.querySelector('i');
+                    if (secretValueField.type === 'password') {
+                        secretValueField.type = 'text';
+                        icon.classList.remove('fa-eye');
+                        icon.classList.add('fa-eye-slash');
+                    } else {
+                        secretValueField.type = 'password';
+                        icon.classList.remove('fa-eye-slash');
+                        icon.classList.add('fa-eye');
+                    }
+                });
+            });
+            
+            // Initialize tooltips
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function(tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+            
+            // Add event listeners to all form submission to show loading
+            document.querySelectorAll('form').forEach(function(form) {
+                form.addEventListener('submit', function() {
+                    showLoading();
+                });
+            });
+        });
+        
+        // Global fetch API wrapper
+        async function fetchAPI(endpoint, options = {}) {
+            window.showLoading();
+            try {
+                const response = await fetch(`/api/${endpoint}`, options);
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                window.showToast('API request failed: ' + error.message, 'error');
+                throw error;
+            } finally {
+                window.hideLoading();
+            }
+        }
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
