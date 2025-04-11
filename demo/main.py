@@ -4,8 +4,7 @@ Main configuration module for the Flask application with database integration
 
 import os
 import logging
-from pathlib import Path
-
+from pathlib import Path  # Make sure this line is here
 from dotenv import load_dotenv
 from flask import Flask
 from flask_migrate import Migrate
@@ -47,8 +46,14 @@ def create_app(test_config=None):
         # Setup a secret key, required by sessions
         app.secret_key = os.environ.get("FLASK_SECRET_KEY") or "vault-demo-secret-key"
         
-        # Configure the database, using the DATABASE_URL environment variable
-        app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
+        # Configure the database, using the DATABASE_URL environment variable with SQLite as fallback
+        database_url = os.environ.get("DATABASE_URL")
+        if not database_url or ("postgres" in database_url and os.name == 'nt'):
+            # Use SQLite as fallback, especially on Windows without PostgreSQL
+            database_url = "sqlite:///vault_demo.db"
+            logger.info("PostgreSQL connection failed or not available. Using SQLite instead.")
+        
+        app.config["SQLALCHEMY_DATABASE_URI"] = database_url
         app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
             "pool_recycle": 300,
             "pool_pre_ping": True,
